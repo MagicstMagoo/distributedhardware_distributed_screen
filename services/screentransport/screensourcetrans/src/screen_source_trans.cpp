@@ -17,8 +17,10 @@
 
 #include <chrono>
 
+#include "distributed_hardware_errno.h"
 #include "dscreen_constants.h"
 #include "dscreen_errcode.h"
+#include "dscreen_fwkkit.h"
 #include "dscreen_hisysevent.h"
 #include "dscreen_hitrace.h"
 #include "dscreen_log.h"
@@ -33,13 +35,13 @@ int32_t ScreenSourceTrans::SetUp(const VideoParam &localParam, const VideoParam 
     DHLOGI("%s: SetUp.", LOG_TAG);
     int32_t ret = CheckTransParam(localParam, remoteParam, peerDevId);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: SetUp failed param error ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: SetUp failed param error ret: %" PRId32, LOG_TAG, ret);
         return ret;
     }
 
     ret = InitScreenTrans(localParam, remoteParam, peerDevId);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: SetUp failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: SetUp failed ret: %" PRId32, LOG_TAG, ret);
         return ret;
     }
 
@@ -57,7 +59,7 @@ int32_t ScreenSourceTrans::Release()
 
     int32_t ret = imageProcessor_->ReleaseImageProcessor();
     if (ret != DH_SUCCESS) {
-        DHLOGD("%s: Release image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Release image processor failed ret: %" PRId32, LOG_TAG, ret);
     }
     imageProcessor_ = nullptr;
 
@@ -65,7 +67,7 @@ int32_t ScreenSourceTrans::Release()
     ret = screenChannel_->ReleaseSession();
     FinishTrace(DSCREEN_HITRACE_LABEL);
     if (ret != DH_SUCCESS) {
-        DHLOGD("%s: Release channel session failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Release channel session failed ret: %" PRId32, LOG_TAG, ret);
     }
     screenChannel_ = nullptr;
 
@@ -89,7 +91,7 @@ int32_t ScreenSourceTrans::Start()
     StartTrace(DSCREEN_HITRACE_LABEL, DSCREEN_SOURCE_OPEN_SESSION_START);
     int32_t ret = screenChannel_->OpenSession();
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Open channel session failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Open channel session failed ret: %" PRId32, LOG_TAG, ret);
         return ret;
     }
 
@@ -98,8 +100,17 @@ int32_t ScreenSourceTrans::Start()
     auto status =
         sessionCond_.wait_for(lck, std::chrono::seconds(SESSION_WAIT_SECONDS), [this]() { return isChannelReady_; });
     if (!status) {
-        DHLOGE("%s: Open channel session timeout(%ds).", LOG_TAG, SESSION_WAIT_SECONDS);
+        DHLOGE("%s: Open channel session timeout(%" PRId32"s).", LOG_TAG, SESSION_WAIT_SECONDS);
         return ERR_DH_SCREEN_TRANS_TIMEOUT;
+    }
+
+    DHLOGI("%s: Source start enable low latency.", LOG_TAG);
+    std::shared_ptr<DistributedHardwareFwkKit> dhFwkKit = DScreenFwkKit::GetInstance().GetDHFwkKit();
+    if (dhFwkKit != nullptr) {
+        ret = dhFwkKit->PublishMessage(DHTopic::TOPIC_LOW_LATENCY, ENABLE_LOW_LATENCY.dump());
+        if (ret != DH_FWK_SUCCESS) {
+            DHLOGE("%s: Source start enable low latency failed ret: %d.", LOG_TAG, ret);
+        }
     }
 
     DHLOGI("%s: Start success.", LOG_TAG);
@@ -118,15 +129,24 @@ int32_t ScreenSourceTrans::Stop()
     bool stopStatus = true;
     int32_t ret = imageProcessor_->StopImageProcessor();
     if (ret != DH_SUCCESS) {
-        DHLOGD("%s: Stop image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Stop image processor failed ret: %" PRId32, LOG_TAG, ret);
         stopStatus = false;
+    }
+
+    DHLOGI("%s: Source stop enable low latency.", LOG_TAG);
+    std::shared_ptr<DistributedHardwareFwkKit> dhFwkKit = DScreenFwkKit::GetInstance().GetDHFwkKit();
+    if (dhFwkKit != nullptr) {
+        ret = dhFwkKit->PublishMessage(DHTopic::TOPIC_LOW_LATENCY, DISABLE_LOW_LATENCY.dump());
+        if (ret != DH_FWK_SUCCESS) {
+            DHLOGE("%s: Source stop enable low latency failed ret: %d.", LOG_TAG, ret);
+        }
     }
 
     StartTrace(DSCREEN_HITRACE_LABEL, DSCREEN_SOURCE_CLOSE_SESSION_START);
     ret = screenChannel_->CloseSession();
     FinishTrace(DSCREEN_HITRACE_LABEL);
     if (ret != DH_SUCCESS) {
-        DHLOGD("%s: Close Session failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Close Session failed ret: %" PRId32, LOG_TAG, ret);
         stopStatus = false;
     }
     isChannelReady_ = false;
@@ -230,7 +250,7 @@ int32_t ScreenSourceTrans::InitScreenTrans(const VideoParam &localParam, const V
 
     int32_t ret = RegisterChannelListener();
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Register channel listener failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Register channel listener failed ret: %" PRId32, LOG_TAG, ret);
         screenChannel_ = nullptr;
         return ret;
     }
@@ -239,7 +259,7 @@ int32_t ScreenSourceTrans::InitScreenTrans(const VideoParam &localParam, const V
 
     ret = RegisterProcessorListener(localParam, remoteParam);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Register data processor listener failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Register data processor listener failed ret: %" PRId32, LOG_TAG, ret);
         screenChannel_ = nullptr;
         imageProcessor_ = nullptr;
         return ret;
@@ -263,7 +283,7 @@ int32_t ScreenSourceTrans::RegisterChannelListener()
     }
     int32_t ret = screenChannel_->CreateSession(listener);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Create session failed ret: %d.", LOG_TAG);
+        DHLOGE("%s: Create session failed ret: %" PRId32, LOG_TAG);
         ReportOptFail(DSCREEN_OPT_FAIL, ret, "dscreen source Create session failed.");
         return ret;
     }
@@ -286,7 +306,7 @@ int32_t ScreenSourceTrans::RegisterProcessorListener(const VideoParam &localPara
     }
     int32_t ret = imageProcessor_->ConfigureImageProcessor(localParam, remoteParam, listener);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Config image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Config image processor failed ret: %" PRId32, LOG_TAG, ret);
         ReportOptFail(DSCREEN_OPT_FAIL, ret, "Config image processor failed.");
         return ret;
     }
@@ -309,7 +329,7 @@ void ScreenSourceTrans::OnSessionOpened()
     }
     int32_t ret = imageProcessor_->StartImageProcessor();
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Start image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Start image processor failed ret: %" PRId32, LOG_TAG, ret);
         return;
     }
 

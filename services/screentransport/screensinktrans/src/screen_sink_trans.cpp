@@ -15,7 +15,9 @@
 
 #include "screen_sink_trans.h"
 
+#include "distributed_hardware_errno.h"
 #include "dscreen_errcode.h"
+#include "dscreen_fwkkit.h"
 #include "dscreen_hisysevent.h"
 #include "dscreen_hitrace.h"
 #include "dscreen_log.h"
@@ -30,13 +32,13 @@ int32_t ScreenSinkTrans::SetUp(const VideoParam &localParam, const VideoParam &r
     DHLOGI("%s: SetUp.", LOG_TAG);
     int32_t ret = CheckTransParam(localParam, remoteParam, peerDevId);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: SetUp failed param error ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: SetUp failed param error ret: %" PRId32, LOG_TAG, ret);
         return ret;
     }
 
     ret = InitScreenTrans(localParam, remoteParam, peerDevId);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: SetUp failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: SetUp failed ret: %" PRId32, LOG_TAG, ret);
         return ret;
     }
 
@@ -54,7 +56,7 @@ int32_t ScreenSinkTrans::Release()
 
     int32_t ret = imageProcessor_->ReleaseImageProcessor();
     if (ret != DH_SUCCESS) {
-        DHLOGD("%s: Release image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Release image processor failed ret: %" PRId32, LOG_TAG, ret);
     }
     imageProcessor_ = nullptr;
 
@@ -62,7 +64,7 @@ int32_t ScreenSinkTrans::Release()
     ret = screenChannel_->ReleaseSession();
     FinishTrace(DSCREEN_HITRACE_LABEL);
     if (ret != DH_SUCCESS) {
-        DHLOGD("%s: Release channel session failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Release channel session failed ret: %" PRId32, LOG_TAG, ret);
     }
     screenChannel_ = nullptr;
 
@@ -80,7 +82,7 @@ int32_t ScreenSinkTrans::Start()
 
     int32_t ret = imageProcessor_->StartImageProcessor();
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Start image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Start image processor failed ret: %" PRId32, LOG_TAG, ret);
         return ret;
     }
 
@@ -99,7 +101,7 @@ int32_t ScreenSinkTrans::Stop()
     bool stopStatus = true;
     int32_t ret = imageProcessor_->StopImageProcessor();
     if (ret != DH_SUCCESS) {
-        DHLOGD("%s: Stop image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Stop image processor failed ret: %" PRId32, LOG_TAG, ret);
         stopStatus = false;
     }
 
@@ -107,7 +109,7 @@ int32_t ScreenSinkTrans::Stop()
     ret = screenChannel_->CloseSession();
     FinishTrace(DSCREEN_HITRACE_LABEL);
     if (ret != DH_SUCCESS && ret != ERR_DH_SCREEN_TRANS_SESSION_NOT_OPEN) {
-        DHLOGD("%s: Close Session failed ret: %d.", LOG_TAG, ret);
+        DHLOGD("%s: Close Session failed ret: %" PRId32, LOG_TAG, ret);
         stopStatus = false;
     }
 
@@ -240,7 +242,7 @@ int32_t ScreenSinkTrans::RegisterChannelListener()
 
     int32_t ret = screenChannel_->CreateSession(listener);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Register channel listenner failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Register channel listenner failed ret: %" PRId32, LOG_TAG, ret);
         ReportOptFail(DSCREEN_OPT_FAIL, ret, "dscreen sink Create session failed.");
         return ret;
     }
@@ -264,14 +266,14 @@ int32_t ScreenSinkTrans::RegisterProcessorListener(const VideoParam &localParam,
 
     int32_t ret = imageProcessor_->ConfigureImageProcessor(localParam, remoteParam, listener);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Config image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Config image processor failed ret: %" PRId32, LOG_TAG, ret);
         ReportOptFail(DSCREEN_OPT_FAIL, ret, "Config image processor failed.");
         return ret;
     }
 
     ret = imageProcessor_->SetImageSurface(decoderSurface_);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: Set image surface failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: Set image surface failed ret: %" PRId32, LOG_TAG, ret);
         return ret;
     }
     return DH_SUCCESS;
@@ -279,12 +281,27 @@ int32_t ScreenSinkTrans::RegisterProcessorListener(const VideoParam &localParam,
 
 void ScreenSinkTrans::OnSessionOpened()
 {
-    DHLOGI("%s: OnChannelSessionOpened.", LOG_TAG);
+    DHLOGI("%s: OnChannelSessionOpened and start enable low latency", LOG_TAG);
+    std::shared_ptr<DistributedHardwareFwkKit> dhFwkKit = DScreenFwkKit::GetInstance().GetDHFwkKit();
+    if (dhFwkKit != nullptr) {
+        int32_t ret = dhFwkKit->PublishMessage(DHTopic::TOPIC_LOW_LATENCY, ENABLE_LOW_LATENCY.dump());
+        if (ret != DH_FWK_SUCCESS) {
+            DHLOGE("%s: Sink start enable low latency failed ret: %d.", LOG_TAG, ret);
+        }
+    }
 }
 
 void ScreenSinkTrans::OnSessionClosed()
 {
-    DHLOGI("%s:OnChannelSessionClosed.", LOG_TAG);
+    DHLOGI("%s: OnChannelSessionClosed and stop enable low latency", LOG_TAG);
+    std::shared_ptr<DistributedHardwareFwkKit> dhFwkKit = DScreenFwkKit::GetInstance().GetDHFwkKit();
+    if (dhFwkKit != nullptr) {
+        int32_t ret = dhFwkKit->PublishMessage(DHTopic::TOPIC_LOW_LATENCY, DISABLE_LOW_LATENCY.dump());
+        if (ret != DH_FWK_SUCCESS) {
+            DHLOGE("%s: Sink stop enable low latency failed ret: %d.", LOG_TAG, ret);
+        }
+    }
+
     std::shared_ptr<IScreenSinkTransCallback> callback = transCallback_.lock();
     if (callback == nullptr) {
         DHLOGE("%s: Trans callback is null.", LOG_TAG);
@@ -302,7 +319,7 @@ void ScreenSinkTrans::OnDataReceived(const std::shared_ptr<DataBuffer> &data)
     DHLOGD("%s: OnChannelDataReceived.", LOG_TAG);
     int32_t ret = imageProcessor_->ProcessImage(data);
     if (ret != DH_SUCCESS) {
-        DHLOGE("%s: send data to image processor failed ret: %d.", LOG_TAG, ret);
+        DHLOGE("%s: send data to image processor failed ret: %" PRId32, LOG_TAG, ret);
     }
 }
 

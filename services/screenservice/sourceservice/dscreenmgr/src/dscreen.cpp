@@ -21,6 +21,7 @@
 #include "dscreen_constants.h"
 #include "dscreen_errcode.h"
 #include "dscreen_hisysevent.h"
+#include "dscreen_json_util.h"
 #include "dscreen_log.h"
 #include "dscreen_util.h"
 #include "screen_manager_adapter.h"
@@ -55,7 +56,7 @@ DScreen::~DScreen()
         ret = sourceTrans_->Release();
     }
     if (ret != DH_SUCCESS) {
-        DHLOGE("source trans release failed. ret: %d", ret);
+        DHLOGE("source trans release failed. ret: %" PRId32, ret);
     }
 
     if (screenId_ != SCREEN_ID_INVALID) {
@@ -72,7 +73,7 @@ DScreen::~DScreen()
 
 void DScreen::OnTransError(int32_t err, const std::string &content)
 {
-    DHLOGD("OnTransError, err: %d", err);
+    DHLOGD("OnTransError, err: %" PRId32, err);
     AddTask(std::make_shared<Task>(TaskType::TASK_DISCONNECT, ""));
     ScreenMgrAdapter::GetInstance().RemoveScreenFromGroup(screenId_);
 }
@@ -121,7 +122,7 @@ int32_t DScreen::AddTask(const std::shared_ptr<Task> &task)
         DHLOGE("AddTask, task is invalid.");
         return ERR_DH_SCREEN_SA_DSCREEN_TASK_NOT_VALID;
     }
-    DHLOGI("AddTask, task type: %d", task->GetTaskType());
+    DHLOGI("AddTask, task type: %" PRId32, task->GetTaskType());
     {
         std::lock_guard<std::mutex> lock(taskQueueMtx_);
         taskQueue_.push(task);
@@ -160,7 +161,7 @@ void DScreen::TaskThreadLoop()
 void DScreen::HandleTask(const std::shared_ptr<Task> &task)
 {
     int32_t taskType = task->GetTaskType();
-    DHLOGI("HandleTask, devId: %s, dhId: %s, task type: %d", GetAnonyString(devId_).c_str(),
+    DHLOGI("HandleTask, devId: %s, dhId: %s, task type: %" PRId32, GetAnonyString(devId_).c_str(),
         GetAnonyString(dhId_).c_str(), taskType);
     switch (taskType) {
         case TaskType::TASK_ENABLE:
@@ -182,7 +183,6 @@ void DScreen::HandleTask(const std::shared_ptr<Task> &task)
 
 void DScreen::HandleEnable(const std::string &param, const std::string &taskId)
 {
-    DHLOGI("DScreen::HandleEnable, param: %s, taskId: %s", param.c_str(), taskId.c_str());
     if (dscreenCallback_ == nullptr) {
         DHLOGE("DScreen::HandleEnable, dscreenCallback_ is nullptr");
         return;
@@ -209,8 +209,8 @@ void DScreen::HandleEnable(const std::string &param, const std::string &taskId)
         return;
     }
 
-    videoParam_->SetScreenWidth(attrJson[KEY_SCREEN_WIDTH]);
-    videoParam_->SetScreenHeight(attrJson[KEY_SCREEN_HEIGHT]);
+    videoParam_->SetScreenWidth(attrJson[KEY_SCREEN_WIDTH].get<uint32_t>());
+    videoParam_->SetScreenHeight(attrJson[KEY_SCREEN_HEIGHT].get<uint32_t>());
 
     // negotiate codecType
     ret = NegotiateCodecType(attrJson[KEY_CODECTYPE]);
@@ -246,7 +246,7 @@ int32_t DScreen::CheckJsonData(json &attrJson)
         return ERR_DH_SCREEN_SA_ENABLE_JSON_ERROR;
     }
 
-    if (!attrJson.contains(KEY_SCREEN_WIDTH) || !attrJson.contains(KEY_SCREEN_HEIGHT) ||
+    if (!IsUInt32(attrJson, KEY_SCREEN_WIDTH) || !IsUInt32(attrJson, KEY_SCREEN_HEIGHT) ||
         !attrJson.contains(KEY_CODECTYPE)) {
         DHLOGE("enable param is invalid.");
         return ERR_DH_SCREEN_SA_ENABLE_JSON_ERROR;
@@ -293,8 +293,7 @@ int32_t DScreen::NegotiateCodecType(const std::string &remoteCodecInfoStr)
         CODEC_NAME_H265) != codecTypeCandidates.end()) {
         videoParam_->SetCodecType(VIDEO_CODEC_TYPE_VIDEO_H265);
         videoParam_->SetVideoFormat(VIDEO_DATA_FORMAT_NV12);
-    } // code form https://gitee.com/gaoqiang_strong/distributedhardware_distributed_screen_r/commit/d724f371a90db61bdef9139e6be951e7c85e727b
-    else if (std::find(codecTypeCandidates.begin(), codecTypeCandidates.end(),
+    } else if (std::find(codecTypeCandidates.begin(), codecTypeCandidates.end(),
         CODEC_NAME_H264) != codecTypeCandidates.end()) {
         videoParam_->SetCodecType(VIDEO_CODEC_TYPE_VIDEO_H264);
         videoParam_->SetVideoFormat(VIDEO_DATA_FORMAT_NV12);

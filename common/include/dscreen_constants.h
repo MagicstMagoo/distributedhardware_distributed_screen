@@ -84,7 +84,7 @@ constexpr uint32_t DSCREEN_MAX_SCREEN_DATA_HEIGHT = 2772;
 
 /* YUV420 buffer size max size */
 constexpr int64_t MAX_YUV420_BUFFER_SIZE = 2560 * 1600 * (3 / 2) * 2;
-constexpr int32_t LOG_MAX_LEN = 4096;
+constexpr int32_t DSCREEN_MAX_LEN = 4096;
 
 constexpr int32_t INVALID_WINDOW_ID = -1;
 
@@ -116,8 +116,8 @@ const std::string KEY_ERR_CODE = "errCode";
 const std::string KEY_ERR_CONTENT = "errContent";
 const std::string KEY_VIDEO_PARAM = "videoParam";
 const std::string KEY_MAPRELATION = "mapRelation";
-const std::string CODEC_NAME_H264 = "OMX_hisi_video_encoder_avc"; // H.264
-const std::string CODEC_NAME_H265 = "OMX_hisi_video_encoder_hevc"; // H.265
+const std::string CODEC_NAME_H264 = "OMX_hisi_video_encoder_avc";
+const std::string CODEC_NAME_H265 = "OMX_hisi_video_encoder_hevc";
 const std::string CODEC_NAME_MPEG4 = "avenc_mpeg4";
 // Publish massage
 const std::string SOURCE_WIN_ID = "sourceWinId";
@@ -131,6 +131,7 @@ const std::string SINK_PROJ_SHOW_HEIGHT = "sinkProjShowHeight";
 const std::string SINK_WIN_SHOW_X = "sinkWinShowX";
 const std::string SINK_WIN_SHOW_Y = "sinkWinShowY";
 
+constexpr uint32_t MAX_MESSAGES_LEN = 40 * 1024 * 1024;
 constexpr float DEFAULT_DENSITY = 2.0;
 constexpr int32_t DEFAULT_SCREEN_FLAGS = 0;
 constexpr uint32_t DEFAULT_FPS = 30;
